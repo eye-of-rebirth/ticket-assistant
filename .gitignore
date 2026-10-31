@@ -6,3 +6,6 @@ __pycache__/
 
 # Local runtime data
 tickets.json
+
+# Local learning records
+/docs/
