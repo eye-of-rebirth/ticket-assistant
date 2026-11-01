@@ -10,10 +10,9 @@
 python -m venv .venv
 ```
 
-首次运行前需要初始化数据文件。下面的命令仅在文件不存在时复制空列表示例，已有工单不会被覆盖：
+直接启动即可。数据文件不存在时从空列表开始，首次成功创建工单时写入文件：
 
 ```powershell
-if (-not (Test-Path -LiteralPath tickets.json)) { Copy-Item -LiteralPath tickets.example.json -Destination tickets.json }
 .\.venv\Scripts\python.exe main.py
 ```
 
@@ -43,8 +42,9 @@ if (-not (Test-Path -LiteralPath tickets.json)) { Copy-Item -LiteralPath tickets
 
 ## 文件与边界
 
-- main.py：输入循环、命令分派、工单创建与ID生成。
-- storage.py：load_tickets(path)读取并返回列表，save_tickets(tickets, path)写入列表；文本读写明确使用UTF-8。
+- main.py：输入循环、命令分派、调用创建服务、处理创建异常及成功后保存。
+- service.py：create_ticket(tickets, text, status="open")清洗文字、拒绝空白和非法状态、生成ID、将新工单加入传入列表，并返回新工单字典。仅允许open与closed；CLI当前使用默认open，没有切换状态的命令。
+- storage.py：load_tickets(path)读取并返回列表，文件不存在时返回空列表，坏JSON仍报错；save_tickets(tickets, path)写入列表。文本读写明确使用UTF-8。
 - tickets.example.json：空列表示例；tickets.json是本地运行数据，不提交。
 - assessment.py：独立于主入口的筛选练习，不是自动化测试套件。
 - tests/test_cli.py：基于标准库unittest的回归检查，由AI辅助编写。
@@ -58,7 +58,7 @@ if (-not (Test-Path -LiteralPath tickets.json)) { Copy-Item -LiteralPath tickets
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-6项检查覆盖中文保存读取、退出重启与非连续ID、空白和空列表、创建后查看、查看不改文件，以及导入入口不会自动读取或提问。使用临时项目与模拟文件，不覆盖本地tickets.json。
+12项检查覆盖中文保存读取、退出重启与非连续ID、空白和空列表、创建后查看、查看不改文件、导入入口不启动交互，以及服务函数默认/指定状态、拒绝无效内容或状态后列表不变、缺文件首次启动和坏JSON继续报错。使用临时项目与模拟文件，不覆盖本地tickets.json。
 
 ## 学习与AI辅助说明
 
@@ -66,4 +66,4 @@ if (-not (Test-Path -LiteralPath tickets.json)) { Copy-Item -LiteralPath tickets
 
 ## 当前限制
 
-尚未处理缺失文件、损坏JSON、写入失败及并发修改；使用前需初始化文件。文件保存使用覆盖写入，不具备原子写入保障。尚未提供查询建议、真实模型调用或公网部署。
+损坏JSON会直接报错，目前没有面向用户的恢复流程；写入失败及并发修改尚未处理。文件保存使用覆盖写入，不具备原子写入保障。尚未校验已有JSON的数据结构。尚未提供查询建议、真实模型调用或公网部署。

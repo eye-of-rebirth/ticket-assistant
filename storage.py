@@ -3,11 +3,13 @@
 import json
 
 
+# 需要执行一个判断JSON文件是否存在的操作
 def load_tickets(path):
-    """读取UTF-8 JSON文件，返回工单列表。"""
-    with open(path, "r", encoding="utf-8") as file:
-        return json.load(file)
-
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return []
 
 def save_tickets(tickets, path):
     """覆盖保存工单列表；调用者负责提供有效数据。"""

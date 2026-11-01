@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from storage import load_tickets, save_tickets
+from service import create_ticket
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,7 @@ class TicketTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.project = Path(self.directory.name)
-        for name in ("main.py", "storage.py"):
+        for name in ("main.py", "storage.py","service.py"):
             shutil.copyfile(PROJECT / name, self.project / name)
         self.path = self.project / "tickets.json"
         self.path.write_text("[]\n", encoding="utf-8")
@@ -38,11 +39,64 @@ class TicketTests(unittest.TestCase):
     def read(self):
         return json.loads(self.path.read_text(encoding="utf-8"))
 
+    def test_blank_ticket_does_not_change_list(self):
+        for text in ("", "   ", "\t\n"):
+            with self.subTest(text=repr(text)):
+                tickets = [{"id": 3, "text": "已有工单", "status": "closed"}]
+                expected = [{"id": 3, "text": "已有工单", "status": "closed"}]
+                with self.assertRaises(ValueError):
+                    create_ticket(tickets, text)
+                self.assertEqual(tickets, expected)
+
+    def test_create_ticket_status(self):
+        tickets = []
+        first = create_ticket(tickets, "  默认工单  ")
+        second = create_ticket(tickets, "关闭工单", status="closed")
+        expected = [
+            {"id": 1, "text": "默认工单", "status": "open"},
+            {"id": 2, "text": "关闭工单", "status": "closed"},
+        ]
+        self.assertEqual(tickets, expected)
+        self.assertEqual(first, expected[0])
+        self.assertEqual(second, expected[1])
+
+    def test_invalid_status_does_not_change_list(self):
+        for status in ("pending", "", "OPEN", None, 123):
+            with self.subTest(status=status):
+                tickets = [{"id": 3, "text": "已有工单", "status": "closed"}]
+                expected = [{"id": 3, "text": "已有工单", "status": "closed"}]
+                with self.assertRaises(ValueError):
+                    create_ticket(tickets, "有效内容", status=status)
+                self.assertEqual(tickets, expected)
+
     def test_storage_round_trip(self):
         data = [{"id": 7, "text": "中文工单", "status": "open"}]
         save_tickets(data, self.path)
         self.assertEqual(load_tickets(self.path), data)
         self.assertIn("中文工单", self.path.read_text(encoding="utf-8"))
+
+    def test_missing_file_returns_empty_list(self):
+        self.path.unlink()
+        self.assertEqual(load_tickets(self.path), [])
+        self.assertFalse(self.path.exists())
+
+    def test_malformed_json_is_not_treated_as_empty(self):
+        self.path.write_text("{broken", encoding="utf-8")
+        with self.assertRaises(json.JSONDecodeError):
+            load_tickets(self.path)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "{broken")
+
+    def test_first_start_without_data_file(self):
+        self.path.unlink()
+        output = self.cli("查看\n首次工单\n退出\n")
+        self.assertIn("暂无工单", output)
+        self.assertEqual(self.read(), [
+            {"id": 1, "text": "首次工单", "status": "open"},
+        ])
+        self.cli("查看\n退出\n")
+        self.assertEqual(self.read(), [
+            {"id": 1, "text": "首次工单", "status": "open"},
+        ])
 
     def test_restart_with_id_gaps(self):
         initial = [{"id": 1, "text": "甲", "status": "open"},
