@@ -7,8 +7,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest.mock import patch
+from openai import APIError, APITimeoutError
 
+fake_llm = types.ModuleType("llm_client")
+fake_llm.generate_suggestion = lambda text: "模拟建议：" + text
+with patch.dict(sys.modules, {"llm_client": fake_llm}):
+    import main
 from storage import load_tickets, save_tickets
 from service import create_ticket
 
@@ -23,6 +30,10 @@ class TicketTests(unittest.TestCase):
         self.project = Path(self.directory.name)
         for name in ("main.py", "storage.py","service.py"):
             shutil.copyfile(PROJECT / name, self.project / name)
+        (self.project / "llm_client.py").write_text(
+            'def generate_suggestion(text):\n    return "模拟建议：" + text\n',
+            encoding="utf-8",
+        )
         self.path = self.project / "tickets.json"
         self.path.write_text("[]\n", encoding="utf-8")
 
@@ -86,6 +97,25 @@ class TicketTests(unittest.TestCase):
             load_tickets(self.path)
         self.assertEqual(self.path.read_text(encoding="utf-8"), "{broken")
 
+    def test_cli_reports_malformed_json_without_overwriting(self):
+        original = b"{broken JSON"
+        self.path.write_bytes(original)
+        output = self.cli("")
+        self.assertIn("工单文件格式损坏", output)
+        self.assertIn("tickets.json", output)
+        self.assertNotIn("请输入问题", output)
+        self.assertEqual(self.path.read_bytes(), original)
+
+    def test_read_permission_error_stops_before_input_or_save(self):
+        with patch.object(main, "load_tickets", side_effect=PermissionError("denied")), \
+                patch("builtins.input") as read_input, \
+                patch.object(main, "save_tickets") as save, \
+                patch("builtins.print") as output:
+            main.main()
+        read_input.assert_not_called()
+        save.assert_not_called()
+        output.assert_any_call("没有权限读取工单文件")
+
     def test_first_start_without_data_file(self):
         self.path.unlink()
         output = self.cli("查看\n首次工单\n退出\n")
@@ -119,8 +149,47 @@ class TicketTests(unittest.TestCase):
     def test_create_then_view(self):
         output = self.cli("新问题\n查看\n退出\n")
         self.assertEqual(self.read(), [{"id": 1, "text": "新问题", "status": "open"}])
-        self.assertIn("固定建议", output)
+        self.assertIn("模拟建议：新问题", output)
         self.assertIn("'text': '新问题'", output)
+
+    def test_ticket_is_saved_before_suggestion(self):
+        expected = [{"id": 1, "text": "新问题", "status": "open"}]
+
+        def generate(text):
+            self.assertEqual(text, "新问题")
+            self.assertEqual(self.read(), expected)
+            return "模拟建议"
+
+        with patch.object(main, "__file__", str(self.project / "main.py")), \
+                patch.object(main, "generate_suggestion", side_effect=generate) as suggest, \
+                patch("builtins.input", side_effect=["新问题", "查看", "退出"]), \
+                patch("builtins.print") as output:
+            main.main()
+        suggest.assert_called_once_with("新问题")
+        output.assert_any_call("模拟建议")
+        self.assertEqual(self.read(), expected)
+
+    def test_api_failure_keeps_saved_ticket_and_loop_running(self):
+        cases = [
+            (APITimeoutError(request=object()), "工单已保存，建议生成超时"),
+            (APIError("simulated failure", request=object(), body=None),
+             "工单已保存，建议生成失败，请稍后再试"),
+        ]
+        for error, message in cases:
+            with self.subTest(error=type(error).__name__):
+                self.path.write_text("[]", encoding="utf-8")
+                with patch.object(main, "__file__", str(self.project / "main.py")), \
+                        patch.object(main, "generate_suggestion", side_effect=[error, "下一次建议"]) as suggest, \
+                        patch("builtins.input", side_effect=["第一条", "查看", "第二条", "退出"]), \
+                        patch("builtins.print") as output:
+                    main.main()
+                output.assert_any_call(message)
+                output.assert_any_call("下一次建议")
+                self.assertEqual(suggest.call_count, 2)
+                self.assertEqual(self.read(), [
+                    {"id": 1, "text": "第一条", "status": "open"},
+                    {"id": 2, "text": "第二条", "status": "open"},
+                ])
 
     def test_view_does_not_write(self):
         data = [{"id": 2, "text": "甲", "status": "open"},
