@@ -1,0 +1,12 @@
+[project]
+name = "ticket-assistant"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "openai>=3.42.1",
+    "python-dotenv>=1.2.4",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

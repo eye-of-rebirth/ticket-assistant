@@ -13,7 +13,9 @@ from unittest.mock import patch
 from openai import APIError, APITimeoutError
 
 fake_llm = types.ModuleType("llm_client")
-fake_llm.generate_suggestion = lambda text: "模拟建议：" + text
+fake_llm.generate_suggestion = lambda text: {
+    "category": "设备故障", "summary": text, "suggestion": "模拟建议：" + text,
+}
 with patch.dict(sys.modules, {"llm_client": fake_llm}):
     import main
 from storage import load_tickets, save_tickets
@@ -31,7 +33,8 @@ class TicketTests(unittest.TestCase):
         for name in ("main.py", "storage.py","service.py"):
             shutil.copyfile(PROJECT / name, self.project / name)
         (self.project / "llm_client.py").write_text(
-            'def generate_suggestion(text):\n    return "模拟建议：" + text\n',
+            'def generate_suggestion(text):\n'
+            '    return {"category": "设备故障", "summary": text, "suggestion": "模拟建议：" + text}\n',
             encoding="utf-8",
         )
         self.path = self.project / "tickets.json"
@@ -150,6 +153,9 @@ class TicketTests(unittest.TestCase):
         output = self.cli("新问题\n查看\n退出\n")
         self.assertEqual(self.read(), [{"id": 1, "text": "新问题", "status": "open"}])
         self.assertIn("模拟建议：新问题", output)
+        self.assertIn("分类:设备故障", output)
+        self.assertIn("摘要:新问题", output)
+        self.assertIn("建议:模拟建议：新问题", output)
         self.assertIn("'text': '新问题'", output)
 
     def test_ticket_is_saved_before_suggestion(self):
@@ -158,7 +164,7 @@ class TicketTests(unittest.TestCase):
         def generate(text):
             self.assertEqual(text, "新问题")
             self.assertEqual(self.read(), expected)
-            return "模拟建议"
+            return {"category": "设备故障", "summary": "新问题", "suggestion": "模拟建议"}
 
         with patch.object(main, "__file__", str(self.project / "main.py")), \
                 patch.object(main, "generate_suggestion", side_effect=generate) as suggest, \
@@ -166,7 +172,7 @@ class TicketTests(unittest.TestCase):
                 patch("builtins.print") as output:
             main.main()
         suggest.assert_called_once_with("新问题")
-        output.assert_any_call("模拟建议")
+        output.assert_any_call("建议:模拟建议")
         self.assertEqual(self.read(), expected)
 
     def test_api_failure_keeps_saved_ticket_and_loop_running(self):
@@ -174,17 +180,21 @@ class TicketTests(unittest.TestCase):
             (APITimeoutError(request=object()), "工单已保存，建议生成超时"),
             (APIError("simulated failure", request=object(), body=None),
              "工单已保存，建议生成失败，请稍后再试"),
+            (ValueError("invalid model response"),
+             "工单已保存，但模型返回格式无效，请稍后再试"),
         ]
         for error, message in cases:
             with self.subTest(error=type(error).__name__):
                 self.path.write_text("[]", encoding="utf-8")
                 with patch.object(main, "__file__", str(self.project / "main.py")), \
-                        patch.object(main, "generate_suggestion", side_effect=[error, "下一次建议"]) as suggest, \
+                        patch.object(main, "generate_suggestion", side_effect=[error, {
+                            "category": "设备故障", "summary": "第二条", "suggestion": "下一次建议",
+                        }]) as suggest, \
                         patch("builtins.input", side_effect=["第一条", "查看", "第二条", "退出"]), \
                         patch("builtins.print") as output:
                     main.main()
                 output.assert_any_call(message)
-                output.assert_any_call("下一次建议")
+                output.assert_any_call("建议:下一次建议")
                 self.assertEqual(suggest.call_count, 2)
                 self.assertEqual(self.read(), [
                     {"id": 1, "text": "第一条", "status": "open"},

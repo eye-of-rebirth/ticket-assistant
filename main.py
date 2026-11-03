@@ -35,8 +35,10 @@ def main():
     user_input = ""
     while True:
         user_input = input("请输入问题").strip()#此处.strip()去掉首尾空白
+        #防空白内容
         if not user_input:
             print("问题不能为空")
+        #退出功能
         elif user_input =="退出":
             print("再见")
             break
@@ -58,11 +60,17 @@ def main():
             else:
                 save_tickets(tickets, path)
                 try:
-                    print(generate_suggestion(user_input))
+                    llm_client = generate_suggestion(user_input)
                 except APITimeoutError:
                     print("工单已保存，建议生成超时")
                 except APIError :
                     print("工单已保存，建议生成失败，请稍后再试")
+                except ValueError :
+                    print("工单已保存，但模型返回格式无效，请稍后再试")
+                else:
+                    print(f"分类:{llm_client["category"]}")
+                    print(f"摘要:{llm_client["summary"]}")
+                    print(f"建议:{llm_client["suggestion"]}")
 
 
 #只有直接运行main.py时才启动程序
