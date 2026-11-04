@@ -61,12 +61,12 @@ def main():
                 save_tickets(tickets, path)
                 try:
                     llm_client = generate_suggestion(user_input)
+                except ValueError as e:
+                    print(f"工单已保存，建议生成失败：{e}")
                 except APITimeoutError:
                     print("工单已保存，建议生成超时")
                 except APIError :
                     print("工单已保存，建议生成失败，请稍后再试")
-                except ValueError :
-                    print("工单已保存，但模型返回格式无效，请稍后再试")
                 else:
                     print(f"分类:{llm_client["category"]}")
                     print(f"摘要:{llm_client["summary"]}")

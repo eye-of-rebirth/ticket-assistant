@@ -1,6 +1,10 @@
 import json
 
 def parse_response(raw_text):
+    #保证返回None时被接住
+    if type(raw_text) != str:
+        raise ValueError("模型回答必须是字符串")
+
     try:
         data = json.loads(raw_text)
 
@@ -29,6 +33,10 @@ def parse_response(raw_text):
         if value == "":
             raise ValueError(f"{field}不能为空")
         data[field] = value
+
+    #控制summary的长度
+    if len(data["summary"])>80:
+        raise ValueError("summary仅允许输出80个字符")
 
     return data
 

@@ -9,20 +9,26 @@ from response_parser import parse_response
 #导入openai模块
 from openai import OpenAI
 
+#把.env中的apikey保存到环境变量
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-api_key = os.environ.get("DEEPSEEK_API_KEY")
-
-
-#ai的客户端,起到一个接入的作用
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://api.deepseek.com",
-    timeout=30.0,
-    max_retries=0,
-)
 
 def generate_suggestion(text):
+    #读取环境变量中的apikey
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+
+    #如果apikey为空结束函数
+    if not api_key:
+        raise ValueError("未配置DEEPSEEK_API_KEY")
+
+    # ai的客户端,起到一个接入的作用
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.deepseek.com",
+        timeout=30.0,
+        max_retries=0,
+    )
+
     response = client.chat.completions.create(
         model="deepseek-flash",
         messages=[
@@ -39,6 +45,5 @@ def generate_suggestion(text):
     return response
 
 if __name__ == "__main__":
-    print("已读取密钥" if api_key else "未配置密钥")
     response = generate_suggestion("投影仪打不开")
     print(response)

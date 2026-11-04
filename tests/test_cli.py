@@ -181,7 +181,7 @@ class TicketTests(unittest.TestCase):
             (APIError("simulated failure", request=object(), body=None),
              "工单已保存，建议生成失败，请稍后再试"),
             (ValueError("invalid model response"),
-             "工单已保存，但模型返回格式无效，请稍后再试"),
+             "工单已保存，建议生成失败：invalid model response"),
         ]
         for error, message in cases:
             with self.subTest(error=type(error).__name__):
