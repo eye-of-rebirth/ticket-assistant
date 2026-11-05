@@ -78,3 +78,31 @@ class LlmClientTests(unittest.TestCase):
                 {"id": 1, "text": "新问题", "status": "open"},
             ])
         self.factory.assert_not_called()
+
+    def test_missing_summary_is_rejected(self):
+        sample = {
+            "category": "设备故障",
+            "suggestion": "检查电源",
+        }
+        reply = self.factory.return_value.chat.completions.create.return_value
+        reply.choices[0].message.content = json.dumps(sample)
+
+        with self.assertRaises(ValueError) as caught:
+            self.module.generate_suggestion("投影仪打不开")
+
+        self.assertIn("summary", str(caught.exception))
+
+    def test_numeric_summary_is_rejected(self):
+        sample = {
+            "category": "设备故障",
+            "summary":123,
+            "suggestion": "检查电源",
+        }
+        reply = self.factory.return_value.chat.completions.create.return_value
+        reply.choices[0].message.content = json.dumps(sample)
+
+        with self.assertRaises(ValueError) as caught:
+            self.module.generate_suggestion("投影仪打不开")
+
+        self.assertIn("summary", str(caught.exception))
+        self.assertIn("字符串", str(caught.exception))

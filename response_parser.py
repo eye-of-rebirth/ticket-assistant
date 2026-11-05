@@ -5,6 +5,7 @@ def parse_response(raw_text):
     if type(raw_text) != str:
         raise ValueError("模型回答必须是字符串")
 
+    #解析response
     try:
         data = json.loads(raw_text)
 
