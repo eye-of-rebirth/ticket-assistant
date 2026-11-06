@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
+from openai import APITimeoutError
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -106,3 +107,30 @@ class LlmClientTests(unittest.TestCase):
 
         self.assertIn("summary", str(caught.exception))
         self.assertIn("字符串", str(caught.exception))
+
+    def test_timeout_is_propagated_without_extra_request(self):
+        #假sdk(软件包)抛出超时错误
+        create = self.factory.return_value.chat.completions.create
+        create.side_effect = APITimeoutError(request=object())
+        #断言时错误
+        with self.assertRaises(APITimeoutError) as caught:
+            self.module.generate_suggestion("投影仪打不开")
+        #指定只能调用一次
+        create.assert_called_once()
+
+    def test_long_summary_is_rejected(self):
+        sample = {
+            "category": "设备故障",
+            "summary":  "中" * 81,
+            "suggestion": "检查电源",
+        }
+        reply = self.factory.return_value.chat.completions.create.return_value
+        reply.choices[0].message.content = json.dumps(sample)
+
+        with self.assertRaises(ValueError) as caught:
+            self.module.generate_suggestion("投影仪打不开")
+
+        self.assertIn("summary", str(caught.exception))
+        self.assertIn("80", str(caught.exception))
+
+        self.factory.return_value.chat.completions.create.assert_called_once()
