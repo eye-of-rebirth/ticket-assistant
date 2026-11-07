@@ -108,15 +108,24 @@ class LlmClientTests(unittest.TestCase):
         self.assertIn("summary", str(caught.exception))
         self.assertIn("字符串", str(caught.exception))
 
-    def test_timeout_is_propagated_without_extra_request(self):
+    def test_two_timeouts_are_propagated_without_third_request(self):
         #假sdk(软件包)抛出超时错误
         create = self.factory.return_value.chat.completions.create
         create.side_effect = APITimeoutError(request=object())
         #断言时错误
         with self.assertRaises(APITimeoutError) as caught:
             self.module.generate_suggestion("投影仪打不开")
-        #指定只能调用一次
-        create.assert_called_once()
+        # 首次超时后只重试一次
+        self.assertEqual(create.call_count, 2)
+
+    def test_timeout_then_success_returns_validated_result(self):
+        create = self.factory.return_value.chat.completions.create
+        create.side_effect = [APITimeoutError(request=object()), create.return_value]
+
+        result = self.module.generate_suggestion("投影仪打不开")
+
+        self.assertEqual(result, self.expected)
+        self.assertEqual(create.call_count, 2)
 
     def test_long_summary_is_rejected(self):
         sample = {
