@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL
+)

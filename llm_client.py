@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 
 from response_parser import parse_response
 
+#警告模块
+import logging
+
 #导入openai模块
 from openai import OpenAI
 
@@ -50,6 +53,7 @@ def generate_suggestion(text):
     try:
         response = send_request()
     except APITimeoutError as e:
+        logging.warning("请求超时，正在重试")
         response = send_request()
 
     return response
