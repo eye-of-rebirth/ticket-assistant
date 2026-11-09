@@ -1,3 +1,4 @@
+from idlelib.debugger_r import close_remote_debugger
 from pathlib import Path
 
 import sqlite3
@@ -22,11 +23,30 @@ def insert_ticket(db_path, text, status="open"):
     finally:
         conn.close()
 
-def list_tickets(db_path):
+def list_tickets(db_path,status=None):
     conn = sqlite3.connect(db_path)
     try:
-        cursor = conn.execute("SELECT id, text, status FROM tickets ORDER BY id")
+        if status is not None:
+            cursor = conn.execute(
+                "SELECT id, text, status FROM tickets WHERE status = ? ORDER BY id",
+                (status,),
+            )
+        else:
+            cursor = conn.execute("SELECT id, text, status FROM tickets ORDER BY id")
         rows = cursor.fetchall()
         return rows
+    finally:
+        conn.close()
+
+def close_ticket(db_path, ticket_id):
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            "UPDATE tickets SET status = 'closed' WHERE id = ?",
+            (ticket_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
     finally:
         conn.close()
