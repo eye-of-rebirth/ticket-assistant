@@ -48,6 +48,18 @@ def suggest(ticket: TicketCreate):
     else:
         raise HTTPException(status_code=400,detail="工单正文不能为空")
 
+#查询工单
+@app.get("/tickets")
+def get_tickets(status: str | None = None):
+    if status in (None, "open", "closed"):
+        db.init_db(DB_PATH)
+        return  db.list_tickets(DB_PATH, status)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="工单状态仅支持 open 或 closed"
+        )
+
 #返回
 @app.get("/health")
 def health():
