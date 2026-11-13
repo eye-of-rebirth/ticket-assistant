@@ -48,12 +48,31 @@ def suggest(ticket: TicketCreate):
     else:
         raise HTTPException(status_code=400,detail="工单正文不能为空")
 
+#关闭指定工单
+@app.post("/tickets/{ticket_id}/close")
+def close_ticket(ticket_id: int):
+    db.init_db(DB_PATH)
+    flag = db.close_ticket(DB_PATH,ticket_id)
+    if flag:
+        return {"id": ticket_id, "status": "closed"}
+    else:
+        raise HTTPException(status_code=404,detail="工单不存在")
+
 #查询工单
 @app.get("/tickets")
 def get_tickets(status: str | None = None):
     if status in (None, "open", "closed"):
+        count = 0
         db.init_db(DB_PATH)
-        return  db.list_tickets(DB_PATH, status)
+        res = {}
+        res["items"] = []
+        tickets = db.list_tickets(DB_PATH, status)
+        for i in tickets:
+            count += 1
+            res["items"].append(i)
+        res["count"] = count
+        return res
+
     else:
         raise HTTPException(
             status_code=400,
